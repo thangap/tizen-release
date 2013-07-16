@@ -381,7 +381,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint 
     , origArgc(aargc)
     , origArgv(new char *[aargc])
 #endif
-    , application_type(0)
+    , application_type(QCoreApplicationPrivate::Tty)
 #ifndef QT_NO_QOBJECT
     , in_exec(false)
     , aboutToQuitEmitted(false)
@@ -394,7 +394,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint 
     static const char *const empty = "";
     if (argc == 0 || argv == 0) {
         argc = 0;
-        argv = (char **)&empty; // ouch! careful with QCoreApplication::argv()!
+        argv = (char **)&empty;
     }
 #ifdef Q_OS_WIN
     qCopy(argv, argv + argc, origArgv);
@@ -589,10 +589,6 @@ void QCoreApplicationPrivate::initLocale()
     Note that some arguments supplied by the user may have been
     processed and removed by QCoreApplication.
 
-    In cases where command line arguments need to be obtained using the
-    argv() function, you must convert them from the local string encoding
-    using QString::fromLocal8Bit().
-
     \section1 Locale Settings
 
     On Unix/Linux Qt is configured to use the system locale settings by
@@ -724,7 +720,7 @@ void QCoreApplication::init()
 #endif
 
 #ifdef QT_EVAL
-    extern void qt_core_eval_init(uint);
+    extern void qt_core_eval_init(QCoreApplicationPrivate::Type);
     qt_core_eval_init(d->application_type);
 #endif
 
@@ -1451,7 +1447,7 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
         // first, we diddle the event so that we can deliver
         // it, and that no one will try to touch it later.
         pe.event->posted = false;
-        QScopedPointer<QEvent> e(pe.event);
+        QEvent *e = pe.event;
         QObject * r = pe.receiver;
 
         --r->d_func()->postedEvents;
@@ -1469,8 +1465,10 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
         };
         MutexUnlocker unlocker(locker);
 
+        QScopedPointer<QEvent> event_deleter(e); // will delete the event (with the mutex unlocked)
+
         // after all that work, it's time to deliver the event.
-        QCoreApplication::sendEvent(r, e.data());
+        QCoreApplication::sendEvent(r, e);
 
         // careful when adding anything below this point - the
         // sendEvent() call might invalidate any invariants this
